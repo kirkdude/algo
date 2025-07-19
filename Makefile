@@ -23,7 +23,7 @@ install: ## Install dependencies and set up development environment
 	@echo "Setting up Algo VPN development environment..."
 	@echo "Installing Python dependencies..."
 	$(PYTHON) -m pip install --user -r requirements.txt
-	$(PYTHON) -m pip install --user pre-commit ansible-lint yamllint
+	$(PYTHON) -m pip install --user -r requirements-dev.txt
 	@echo "Installing pre-commit hooks..."
 	pre-commit install
 	@echo "Development environment ready!"
@@ -119,8 +119,6 @@ update-users: ## Update VPN users
 	./algo update-users
 
 ## Development Shortcuts
-dev-setup: install ## Set up development environment with all tools
-	@echo "Installing additional development tools..."
-	$(PYTHON) -m pip install --user black flake8 bandit
+dev-setup: install ## Set up development environment with all tools (alias for install)
 
 check: lint test ## Quick check - run linting and tests

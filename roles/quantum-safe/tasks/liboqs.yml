@@ -44,14 +44,22 @@
     creates: /usr/local/lib/liboqs.{{ 'so' if liboqs_shared_libs else 'a' }}
   notify: update library cache
 
-- name: Create liboqs symlinks
-  file:
-    src: "/usr/local/lib/liboqs.so"
-    dest: "/usr/lib/x86_64-linux-gnu/liboqs.so"
-    state: link
+- name: Verify liboqs library is accessible
+  command: ldconfig -p | grep liboqs
+  register: liboqs_ldconfig_check
+  changed_when: false
+  failed_when: false
+  when: liboqs_shared_libs
+
+- name: Add /usr/local/lib to ld.so.conf if liboqs not found
+  lineinfile:
+    path: /etc/ld.so.conf.d/liboqs.conf
+    line: "/usr/local/lib"
+    create: yes
   when:
     - liboqs_shared_libs
-    - ansible_architecture == "x86_64"
+    - liboqs_ldconfig_check.rc != 0
+  notify: update library cache
 
 - name: Generate liboqs configuration file
   template:

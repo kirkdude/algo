@@ -27,8 +27,8 @@ rules:
     indent-sequences: true
     check-multi-line-strings: false
 
-  # Allow key duplicates (sometimes needed in Ansible)
-  key-duplicates: disable
+  # Key duplicates are disabled by default (invalid YAML)
+  # If duplicate keys are encountered, they should be refactored to use lists
 
   # Allow flexible braces spacing (common in Ansible)
   braces:
