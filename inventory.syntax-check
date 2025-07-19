@@ -1,0 +1,3 @@
+# Minimal inventory for syntax checking
+[vpn-host]
+localhost ansible_connection=local

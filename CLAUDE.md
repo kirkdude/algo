@@ -28,10 +28,14 @@ Algo VPN is an Ansible-based project that automates the setup of secure personal
 - **Quick linting**: `make lint` - Run pre-commit hooks on all files
 - **Comprehensive linting**: `make lint-full` - Pre-commit + Ansible + shell script checks
 - **Auto-fix linting**: `make lint-fix` - Apply automatic fixes where possible
+- **GitHub Actions equivalent**: `make ci-simple` - Run basic checks equivalent to GitHub Actions locally
+- **Full CI simulation**: `make ci-local` - Mimic GitHub Actions Main workflow lint job
 - **Manual checks**:
-  - Syntax check: `ansible-playbook main.yml --syntax-check`
+  - Syntax check: `ansible-playbook -i inventory.syntax-check main.yml --syntax-check`
   - Shell script linting: `shellcheck algo install.sh`
   - Ansible linting: `ansible-lint *.yml roles/{local,cloud-*}/*/*.yml`
+
+**Note**: Collection version warnings may appear with older ansible-core versions but don't affect functionality.
 
 ### Docker Operations
 
