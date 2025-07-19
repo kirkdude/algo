@@ -1,0 +1,7 @@
+# Allow specific HTML elements (links and images)
+MD033:
+  allowed_elements: [a, img]
+
+# Disable rules that conflict with documentation style
+MD039: false  # Allow spaces inside link text
+MD013: false  # Disable line length checks for better documentation readability
