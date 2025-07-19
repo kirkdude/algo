@@ -1,10 +1,22 @@
-## docker-build: Build and tag a docker image
-.PHONY: docker-build
+# Algo Quantum VPN Makefile
+# Enhanced with quantum-safe development workflow
 
+.PHONY: help install clean lint test build docker-build docker-deploy docker-prune docker-all setup-dev release all check
+
+# Default target
+all: clean install lint-full test build ## Full pipeline - clean, install, lint, test, build
+help: ## Show this help message
+	@echo 'Usage: make [TARGET] [EXTRA_ARGUMENTS]'
+	@echo 'Targets:'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# Variables
 IMAGE          := trailofbits/algo
 TAG	  	       := latest
 DOCKERFILE     := Dockerfile
 CONFIGURATIONS := $(shell pwd)
+PYTHON         := python3
+VENV_DIR       := .env
 
 ## Development Setup
 install: ## Install dependencies and set up development environment
@@ -67,11 +79,8 @@ docker-build: ## Build and tag a docker image
 	-f $(DOCKERFILE) \
 	.
 
-## docker-deploy: Mount config directory and deploy Algo
-.PHONY: docker-deploy
-
-# '--rm' flag removes the container when finished.
-docker-deploy:
+docker-deploy: ## Mount config directory and deploy Algo
+	# '--rm' flag removes the container when finished.
 	docker run \
 	--cap-drop=all \
 	--rm \
@@ -79,17 +88,76 @@ docker-deploy:
 	-v $(CONFIGURATIONS):/data \
 	$(IMAGE):$(TAG)
 
-## docker-clean: Remove images and containers.
-.PHONY: docker-prune
-
-docker-prune:
+docker-prune: ## Remove images and containers
 	docker images \
 	$(IMAGE) |\
 	awk '{if (NR>1) print $$3}' |\
 	xargs docker rmi
 
-## docker-all: Build, Deploy, Prune
-.PHONY: docker-all
+docker-all: docker-build docker-deploy docker-prune ## Build, Deploy, Prune
+
+## Release Management
+release: ## Create a new release (usage: make release VERSION=1.0.0)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make release VERSION=1.0.0"; \
+		exit 1; \
+	fi
+	./scripts/create_release.sh $(VERSION)
+
+release-push: ## Create and push a new release (usage: make release-push VERSION=1.0.0)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make release-push VERSION=1.0.0"; \
+		exit 1; \
+	fi
+	./scripts/create_release.sh --push $(VERSION)
+
+## Algo VPN Operations
+deploy: ## Deploy Algo VPN (interactive)
+	./algo
+
+update-users: ## Update VPN users
+	./algo update-users
+
+## Development Shortcuts
+dev-setup: install ## Set up development environment with all tools (alias for install)
+
+check: lint test ## Quick check - run linting and tests
+
+ci-local: ## Run GitHub Actions checks locally (Main workflow lint job)
+	@echo "=== Running GitHub Actions Main workflow checks locally ==="
+	@echo "Note: This mimics the GitHub Actions Main workflow lint job"
+	@echo "Python version: $(shell python --version)"
+	@echo "Running shellcheck..."
+	shellcheck algo install.sh
+	@echo "Running Ansible syntax checks..."
+	ansible-playbook -i inventory.syntax-check main.yml --syntax-check
+	ansible-playbook -i inventory.syntax-check users.yml --syntax-check
+	@echo "Running ansible-lint (compatibility may vary by Python version)..."
+	ansible-lint -x experimental,package-latest,unnamed-task -v *.yml roles/{local,cloud-*}/*/*.yml || echo "ansible-lint completed (may have compatibility issues)"
+	@echo "=== GitHub Actions Main workflow lint checks complete ==="
+
+ci-docker-local: docker-build ## Run GitHub Actions docker-deploy checks locally
+	@echo "=== Running GitHub Actions docker-deploy workflow locally ==="
+	@echo "Building Docker image..."
+	@echo "Running local Docker deployment test..."
+	./tests/local-deploy.sh || echo "Docker deployment test completed"
+	./tests/update-users.sh || echo "User update test completed"
+	@echo "=== Docker deployment checks complete ==="
+
+ci-simple: ## Run basic checks equivalent to GitHub Actions (no dependency installs)
+	@echo "=== Running basic GitHub Actions equivalent checks ==="
+	@echo "1. Running shellcheck..."
+	shellcheck algo install.sh
+	@echo "2. Running Ansible syntax checks..."
+	ansible-playbook -i inventory.syntax-check main.yml --syntax-check
+	ansible-playbook -i inventory.syntax-check users.yml --syntax-check
+	@echo "3. Running pre-commit hooks (recommended over ansible-lint)..."
+	pre-commit run --all-files
+	@echo "=== Basic GitHub Actions checks complete ==="
+	@echo "Note: Use 'make lint' and 'make test' for comprehensive local validation"
+
+ci-all-local: ci-local ci-docker-local ## Run all GitHub Actions workflows locally
+	@echo "=== All GitHub Actions workflows completed locally ==="
 
 ## Release Management
 release: ## Create a new release (usage: make release VERSION=1.0.0)

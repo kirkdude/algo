@@ -20,6 +20,7 @@ ansible-galaxy collection install -r collections/requirements.yml
 ## Version Warnings
 
 If you see warnings like:
+
 ```
 [WARNING]: Collection community.general does not support Ansible version 2.13.10
 ```
@@ -27,7 +28,7 @@ If you see warnings like:
 This means your local ansible-core version is older than what the installed collections expect. The playbooks will still work for syntax checking and basic operations, but for full functionality, consider:
 
 1. Upgrading to Python 3.9+ and installing `ansible==9.1.0`
-2. Using the Docker deployment method 
+2. Using the Docker deployment method
 3. Ignoring the warnings for development (they don't affect syntax validation)
 
 The warnings are informational and don't prevent syntax checking or most operations.

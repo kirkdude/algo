@@ -5,9 +5,9 @@
 collections:
   - name: community.general
     version: '>=5.0.0,<8.0.0'  # Compatible with ansible-core 2.13+
-  
-  - name: community.crypto  
+
+  - name: community.crypto
     version: '>=2.0.0,<4.0.0'  # Compatible with ansible-core 2.13+
-  
+
   - name: ansible.posix
     version: '>=1.4.0,<2.0.0'  # Compatible with ansible-core 2.13+
