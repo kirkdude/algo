@@ -21,7 +21,7 @@ ansible-galaxy collection install -r collections/requirements.yml
 
 If you see warnings like:
 
-```
+```text
 [WARNING]: Collection community.general does not support Ansible version 2.13.10
 ```
 

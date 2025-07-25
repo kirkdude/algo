@@ -14,4 +14,15 @@ export ANSIBLE_EXTRA_ARGS=''
 export REPO_SLUG=${REPOSITORY:-trailofbits/algo}
 export REPO_BRANCH=${BRANCH:-master}
 
-curl -s https://raw.githubusercontent.com/${REPOSITORY:-trailofbits/algo}/${BRANCH:-master}/install.sh | sudo -E bash -x"
+# Use pre-staged install.sh script instead of downloading
+if [ -f /opt/install.sh ]; then
+  echo 'Using pre-staged install.sh script'
+  sudo -E bash -x /opt/install.sh
+else
+  echo 'Pre-staged script not found, downloading from GitHub'
+  curl -s https://raw.githubusercontent.com/${REPOSITORY:-trailofbits/algo}/${BRANCH:-master}/install.sh | sudo -E bash -x
+fi
+
+# Create result.json to signal completion
+mkdir -p /var/lib/cloud/data/ || true
+touch /var/lib/cloud/data/result.json"

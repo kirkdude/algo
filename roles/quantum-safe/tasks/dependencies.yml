@@ -24,7 +24,7 @@
       - pkg-config
       - autotools-dev
       - debhelper
-      - dh-systemd
+      - libsystemd-dev
     state: present
     update_cache: yes
   when: ansible_os_family == "Debian"
@@ -57,16 +57,26 @@
     state: present
   when: ansible_os_family == "RedHat"
 
-- name: Install Python development dependencies
-  pip:
+- name: Install Python development dependencies (Ubuntu/Debian)
+  apt:
     name:
-      - pytest
-      - pytest-xdist
-      - pyyaml
-      - cryptography
-      - requests
+      - python3-pytest
+      - python3-pytest-xdist
+      - python3-yaml
+      - python3-cryptography
+      - python3-requests
     state: present
-    executable: pip3
+  when: ansible_os_family == "Debian"
+
+- name: Install Python development dependencies (RedHat/CentOS)
+  dnf:
+    name:
+      - python3-pytest
+      - python3-pyyaml
+      - python3-cryptography
+      - python3-requests
+    state: present
+  when: ansible_os_family == "RedHat"
 
 - name: Create quantum-safe directories
   file:

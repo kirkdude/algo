@@ -32,6 +32,10 @@
   include_tasks: configs.yml
   when: create_hybrid_configs
 
+- name: Generate quantum-safe client configurations
+  include_tasks: client-configs-pq.yml
+  when: integrate_with_strongswan
+
 - name: Setup monitoring and benchmarking
   include_tasks: monitoring.yml
   when: performance_monitoring

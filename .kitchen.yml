@@ -1,0 +1,137 @@
+---
+# Test Kitchen configuration for Algo VPN quantum-safe testing
+
+driver:
+  name: vagrant
+  provider: virtualbox
+  memory: 4096  # Increased memory for LibOQS compilation
+  cpus: 2
+
+provisioner:
+  name: ansible_playbook
+  hosts: test-kitchen
+  # requirements_path: requirements.txt  # Skip for now since ansible-galaxy fails
+  ansible_inventory_path: test-inventory
+  playbook: test-quantum-safe-kitchen.yml
+  ansible_verbose: true
+  ansible_verbosity: 2
+  require_ansible_repo: true
+  ansible_omnibus_url: https://raw.githubusercontent.com/neillturner/omnibus-ansible/master/ansible_install.sh
+
+platforms:
+  - name: ubuntu-22.04
+    driver:
+      box: ubuntu/jammy64
+      box_version: ">= 20240101.0.0"
+    provisioner:
+      ansible_host: 127.0.0.1
+      ansible_port: 2222
+      ansible_ssh_private_key_file: <%= `vagrant ssh-config | grep IdentityFile | awk '{print $2}'`.strip.gsub('"', '') %>
+  - name: ubuntu-24.04
+    driver:
+      box: bento/ubuntu-24.04
+      box_version: ">= 202404.26.0"
+    provisioner:
+      ansible_host: 127.0.0.1
+      ansible_port: 2222
+      ansible_ssh_private_key_file: <%= `vagrant ssh-config | grep IdentityFile | awk '{print $2}'`.strip.gsub('"', '') %>
+
+suites:
+  - name: quantum-safe-local
+    provisioner:
+      playbook: test-quantum-safe-local.yml
+      extra_vars:
+        # Quantum-safe configuration
+        quantum_safe_enabled: true
+        quantum_safe_mode: hybrid
+        quantum_safe_security_level: standard
+        quantum_safe_dev_mode: true
+        quantum_safe_testing: true
+
+        # Local deployment settings
+        algo_provider: local
+        cloud_instance_ip: localhost
+        ansible_ssh_user: vagrant
+
+        # VPN settings
+        ipsec_enabled: true
+        wireguard_enabled: true
+        algo_dns_adblocking: false
+        dns_encryption: true
+
+        # Disable prompts for automated testing
+        server_ip: 127.0.0.1
+
+        # Performance testing
+        enable_performance_tests: true
+
+        # Missing variables for common role
+        unattended_reboot:
+          enabled: false
+          time: "06:00"
+        dns_servers:
+          ipv4:
+            - 1.1.1.1
+            - 8.8.8.8
+        local_service_ip: "172.16.0.1"
+        local_service_ipv6: "fd00::1"
+        reduce_mtu: 0
+        alternative_ingress_ip: false
+        wireguard_port: 51820
+        strongswan_network: 10.48.0.0/16
+        wireguard_network_ipv4: 10.49.0.0/16
+        ansible_ssh_port: 22
+        BetweenClients_DROP: true
+        block_smb: true
+        block_netbios: true
+        custom_server_stamps: {}
+        IP_subject_alt_name: algo-quantum-test.local
+        ipsec_config_path: "configs/{{ ansible_default_ipv4.address }}/ipsec/"
+        users:
+          - test-client-1
+          - test-client-2
+
+  - name: quantum-safe-strongswan-only
+    provisioner:
+      playbook: test-quantum-safe-strongswan.yml
+      extra_vars:
+        quantum_safe_enabled: true
+        quantum_safe_mode: hybrid
+        quantum_safe_security_level: high  # Test ML-KEM-1024
+
+        # Focus on strongSwan only
+        ipsec_enabled: true
+        wireguard_enabled: false
+
+        users:
+          - strongswan-test-client
+
+        # Test different security levels
+        test_security_levels:
+          - standard
+          - high
+          - conservative
+
+  - name: quantum-safe-benchmarks
+    provisioner:
+      playbook: test-quantum-safe-benchmarks.yml
+      extra_vars:
+        quantum_safe_enabled: true
+        quantum_safe_benchmarks: true
+        performance_monitoring: true
+
+        # Minimal setup for benchmarking
+        ipsec_enabled: true
+        wireguard_enabled: false
+        users: ["benchmark-client"]
+
+verifier:
+  name: shell
+  command: |
+    # Custom verification scripts - use sudo with -S for non-interactive mode
+    echo 'vagrant' | sudo -S /opt/quantum-safe/tests/run-all-tests.sh
+    echo 'vagrant' | sudo -S systemctl status strongswan
+    echo 'vagrant' | sudo -S swanctl --list-algs | grep -i kem
+
+transport:
+  name: ssh

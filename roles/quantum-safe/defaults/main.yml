@@ -10,6 +10,7 @@ liboqs_shared_libs: true
 liboqs_build_parallel_jobs: "{{ ansible_processor_vcpus | default(4) }}"
 
 # strongSwan quantum-safe configuration
+# Use official strongSwan with OQS plugin support
 strongswan_version: "6.0.2"
 strongswan_repo_url: "https://github.com/strongswan/strongswan"
 strongswan_install_dir: "/opt/strongswan"

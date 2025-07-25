@@ -2,9 +2,13 @@ name: Code Quality
 
 on:
   push:
-    branches: [ main, master, develop, feature/* ]
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   code-quality:
