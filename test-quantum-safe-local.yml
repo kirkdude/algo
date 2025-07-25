@@ -1,0 +1,171 @@
+---
+# Test Kitchen playbook for local quantum-safe deployment
+- name: Test quantum-safe Algo VPN deployment locally
+  hosts: localhost
+  connection: local
+  become: true
+  vars_files:
+    - config.cfg
+  vars:
+    # Override for testing
+    quantum_safe_enabled: true
+    quantum_safe_mode: hybrid
+    quantum_safe_security_level: "ML-KEM-768"
+    quantum_safe_dev_mode: true
+    quantum_safe_testing: true
+    integrate_with_strongswan: true
+    create_hybrid_configs: true
+    performance_monitoring: true
+
+    # Local deployment specific
+    algo_provider: local
+    cloud_instance_ip: localhost
+    inventory_hostname: localhost
+
+    # Test configuration
+    IP_subject_alt_name: "algo-quantum-test.local"
+    algo_server_name: "quantum-test-server"
+    ipsec_config_path: "configs/{{ IP_subject_alt_name }}/ipsec"
+
+    # Disable cloud-specific features for local testing
+    cloudinit: false
+
+  tasks:
+    - name: Display quantum-safe test information
+      debug:
+        msg: |
+          ================================================
+          Algo VPN Quantum-Safe Local Test Deployment
+          ================================================
+          Mode: {{ quantum_safe_mode }}
+          Security Level: {{ quantum_safe_security_level }}
+          strongSwan: {{ strongswan_version }}
+          LibOQS: {{ liboqs_version }}
+          ================================================
+
+    - name: Validate quantum-safe prerequisites
+      assert:
+        that:
+          - quantum_safe_enabled | bool
+          - quantum_safe_mode in ['hybrid', 'pure_pq', 'classical']
+          - ipsec_enabled | bool
+        msg: "Quantum-safe configuration validation failed"
+
+    - name: Import common role (base system setup)
+      import_role:
+        name: common
+      tags: common
+
+    - name: Import DNS role (if enabled)
+      import_role:
+        name: dns
+      when: algo_dns_adblocking or dns_encryption
+      tags: dns
+
+    - name: Import quantum-safe role
+      import_role:
+        name: quantum-safe
+      tags:
+        - quantum-safe
+        - ipsec
+
+    - name: Import WireGuard role (if enabled)
+      import_role:
+        name: wireguard
+      when: wireguard_enabled
+      tags: wireguard
+
+    - name: Create test validation directory
+      file:
+        path: /opt/quantum-safe/test-kitchen-results
+        state: directory
+        mode: 0755
+        owner: root
+        group: root
+
+    - name: Run quantum-safe validation tests
+      shell: |
+        set -e
+        echo "=== Quantum-Safe Test Kitchen Validation ===" > /opt/quantum-safe/test-kitchen-results/validation.log
+        echo "Test started: $(date)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+
+        # Test 1: LibOQS installation
+        if [ -f "/usr/local/lib/liboqs.so" ]; then
+          echo "✓ LibOQS library installed" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        else
+          echo "✗ LibOQS library missing" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        fi
+
+        # Test 2: strongSwan quantum-safe build
+        if [ -f "{{ strongswan_install_dir }}/sbin/ipsec" ] && {{ strongswan_install_dir }}/sbin/ipsec version | grep -q "6.0"; then
+          echo "✓ strongSwan 6.0+ installed" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        elif [ -f "/usr/sbin/ipsec" ] && /usr/sbin/ipsec version | grep -q "6.0"; then
+          echo "✓ strongSwan 6.0+ installed (system location)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        elif [ -f "/usr/bin/ipsec" ] && /usr/bin/ipsec version | grep -q "6.0"; then
+          echo "✓ strongSwan 6.0+ installed (usr/bin location)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        elif command -v ipsec >/dev/null 2>&1 && ipsec version | grep -q "6.0"; then
+          echo "✓ strongSwan 6.0+ installed (PATH location)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        else
+          echo "✗ strongSwan 6.0+ not found" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        fi
+
+        # Test 3: ML-KEM algorithm availability (check for OQS plugin support)
+        IPSEC_BIN=""
+        if [ -f "{{ strongswan_install_dir }}/sbin/ipsec" ]; then
+          IPSEC_BIN="{{ strongswan_install_dir }}/sbin/ipsec"
+          SWANCTL_BIN="{{ strongswan_install_dir }}/sbin/swanctl"
+        elif [ -f "/usr/sbin/ipsec" ]; then
+          IPSEC_BIN="/usr/sbin/ipsec"
+          SWANCTL_BIN="/usr/sbin/swanctl"
+        elif command -v ipsec >/dev/null 2>&1; then
+          IPSEC_BIN="ipsec"
+          SWANCTL_BIN="swanctl"
+        fi
+
+        if [ -n "$IPSEC_BIN" ]; then
+          if $IPSEC_BIN version 2>/dev/null | grep -qi oqs; then
+            echo "✓ ML-KEM algorithms available (OQS support built-in)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+          elif command -v "$SWANCTL_BIN" >/dev/null 2>&1 && $SWANCTL_BIN --list-algs 2>/dev/null | grep -qi kem; then
+            echo "✓ ML-KEM algorithms available" >> /opt/quantum-safe/test-kitchen-results/validation.log
+          elif $IPSEC_BIN statusall 2>/dev/null | grep -qi oqs; then
+            echo "✓ OQS plugin loaded (ML-KEM ready)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+          elif [ -f "/usr/local/lib/liboqs.so" ] && $IPSEC_BIN version 2>/dev/null | grep -q "6.0"; then
+            echo "✓ ML-KEM algorithms ready (LibOQS + strongSwan 6.0+)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+          else
+            echo "⚠ ML-KEM algorithms not detected" >> /opt/quantum-safe/test-kitchen-results/validation.log
+          fi
+        else
+          echo "⚠ ML-KEM algorithms not detected (no ipsec binary found)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        fi
+
+        # Test 4: Configuration generation
+        if [ -d "configs/{{ IP_subject_alt_name }}/ipsec/quantum-safe" ]; then
+          echo "✓ Quantum-safe client configurations generated" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        else
+          echo "⚠ Quantum-safe client configs not found" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        fi
+
+        echo "Test completed: $(date)" >> /opt/quantum-safe/test-kitchen-results/validation.log
+        echo "=== Test Kitchen Validation Complete ===" >> /opt/quantum-safe/test-kitchen-results/validation.log
+
+        # Display results
+        cat /opt/quantum-safe/test-kitchen-results/validation.log
+      register: validation_results
+      tags: validate
+
+    - name: Display validation results
+      debug:
+        msg: "{{ validation_results.stdout_lines }}"
+      tags: validate
+
+    - name: Generate test completion report
+      template:
+        src: roles/quantum-safe/templates/test-kitchen-report.j2
+        dest: /opt/quantum-safe/test-kitchen-results/final-report.md
+        mode: 0644
+      vars:
+        test_start_time: "{{ ansible_date_time.epoch }}"
+        test_mode: "{{ quantum_safe_mode }}"
+        test_security_level: "{{ quantum_safe_security_level }}"
+        test_users: "{{ users }}"
+      tags: report

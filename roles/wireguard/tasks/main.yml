@@ -1,4 +1,21 @@
 ---
+- name: Install required Python libraries
+  block:
+    - name: Try to install netaddr with pip
+      pip:
+        name: netaddr
+        state: present
+        extra_args: --user
+      delegate_to: localhost
+      become: false
+  rescue:
+    - name: Install netaddr with system package manager (externally-managed Python)
+      apt:
+        name: python3-netaddr
+        state: present
+      become: true
+      delegate_to: localhost
+
 - name: Ensure the required directories exist
   file:
     dest: "{{ item }}"
@@ -90,6 +107,7 @@
     name: "{{ service_name }}"
     state: started
     enabled: true
+  when: ansible_env.GITHUB_ACTIONS is not defined and ansible_env.CI is not defined
 
 - name: Delete the PKI directory
   file:

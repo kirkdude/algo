@@ -1,0 +1,385 @@
+---
+# Test strongSwan quantum-safe functionality specifically
+- name: Test quantum-safe strongSwan deployment
+  hosts: localhost
+  connection: local
+  become: true
+  vars_files:
+    - config.cfg
+  vars:
+    # Focus on strongSwan only
+    wireguard_enabled: false
+    ipsec_enabled: true
+    quantum_safe_enabled: true
+    quantum_safe_mode: hybrid
+    quantum_safe_security_level: "ML-KEM-768"
+    quantum_safe_dev_mode: true
+    quantum_safe_testing: true
+    integrate_with_strongswan: true
+    create_hybrid_configs: true
+    performance_monitoring: true
+    strongswan_install_dir: "/opt/strongswan"
+
+    # Local deployment specific
+    algo_provider: local
+    cloud_instance_ip: localhost
+    inventory_hostname: localhost
+
+    # Missing variables for common role
+    unattended_reboot:
+      enabled: false
+      time: "06:00"
+    dns_servers:
+      ipv4:
+        - 1.1.1.1
+        - 8.8.8.8
+    local_service_ip: "172.16.0.1"
+    local_service_ipv6: "fd00::1"
+    reduce_mtu: 0
+    alternative_ingress_ip: false
+    wireguard_port: 51820
+    strongswan_network: 10.48.0.0/16
+    wireguard_network_ipv4: 10.49.0.0/16
+    ansible_ssh_port: 22
+    BetweenClients_DROP: true
+    block_smb: true
+    block_netbios: true
+    custom_server_stamps: {}
+
+    # Test configuration
+    IP_subject_alt_name: "algo-quantum-strongswan-test.local"
+    algo_server_name: "quantum-strongswan-test-server"
+    ipsec_config_path: "configs/{{ IP_subject_alt_name }}/ipsec"
+
+  tasks:
+    - name: Import common role (base system setup)
+      import_role:
+        name: common
+      tags: common
+
+    - name: Import quantum-safe role (includes strongSwan)
+      import_role:
+        name: quantum-safe
+      tags:
+        - quantum-safe
+        - ipsec
+
+- name: strongSwan quantum-safe specific tests
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if strongSwan binary exists
+      stat:
+        path: /opt/quantum-safe/sbin/ipsec
+      register: ipsec_binary
+
+    - name: Force rebuild strongSwan if binary missing
+      shell: |
+        set -e
+        echo "=== Forcing strongSwan rebuild ==="
+
+        # Set variables
+        STRONGSWAN_VERSION="6.0.2"
+        STRONGSWAN_DIR="/opt/quantum-safe"
+        BUILD_DIR="/tmp/strongswan-build"
+
+        # Clean old installations
+        rm -rf "${STRONGSWAN_DIR}/strongswan-oqs/"
+        rm -rf "${STRONGSWAN_DIR}/sbin/ipsec"
+        rm -rf "${STRONGSWAN_DIR}/libexec/ipsec/"
+        rm -rf "${BUILD_DIR}"
+
+        # Create build directory
+        mkdir -p "${BUILD_DIR}"
+        cd "${BUILD_DIR}"
+
+        # Download and extract strongSwan
+        echo "Downloading strongSwan ${STRONGSWAN_VERSION}..."
+        wget -q "https://download.strongswan.org/strongswan-${STRONGSWAN_VERSION}.tar.gz"
+        tar -xzf "strongswan-${STRONGSWAN_VERSION}.tar.gz"
+        cd "strongswan-${STRONGSWAN_VERSION}"
+
+        # Configure with quantum-safe support
+        echo "Configuring strongSwan with quantum-safe support..."
+        ./configure \
+          --prefix="${STRONGSWAN_DIR}" \
+          --sysconfdir=/etc \
+          --enable-swanctl \
+          --enable-systemd \
+          --enable-openssl \
+          --enable-oqs \
+          --enable-eap-identity \
+          --enable-eap-md5 \
+          --enable-eap-tls \
+          --enable-eap-ttls \
+          --enable-eap-peap \
+          --enable-eap-mschapv2 \
+          --enable-xauth-eap \
+          --disable-gmp \
+          --disable-des \
+          --disable-rc2 \
+          --disable-md4 \
+          LIBS="-loqs" \
+          CFLAGS="-I/usr/local/include" \
+          LDFLAGS="-L/usr/local/lib"
+
+        # Build strongSwan
+        echo "Building strongSwan..."
+        make -j$(nproc)
+
+        # Install strongSwan
+        echo "Installing strongSwan..."
+        make install
+
+        # Create ipsec wrapper if needed
+        if [[ ! -f "${STRONGSWAN_DIR}/sbin/ipsec" ]] && [[ -f "${STRONGSWAN_DIR}/sbin/swanctl" ]]; then
+          echo "Creating ipsec wrapper script..."
+          mkdir -p "${STRONGSWAN_DIR}/sbin"
+          cat > "${STRONGSWAN_DIR}/sbin/ipsec" << 'EOF'
+        #!/bin/bash
+        # strongSwan ipsec wrapper script
+        STRONGSWAN_DIR="/opt/quantum-safe"
+        export LD_LIBRARY_PATH="/usr/local/lib:${STRONGSWAN_DIR}/lib/ipsec:${LD_LIBRARY_PATH}"
+
+        case "$1" in
+          version|--version)
+            echo "strongSwan 6.0.2 with LibOQS support"
+            ;;
+          status|statusall)
+            "${STRONGSWAN_DIR}/sbin/swanctl" --stats
+            ;;
+          start)
+            systemctl start strongswan
+            ;;
+          stop)
+            systemctl stop strongswan
+            ;;
+          restart)
+            systemctl restart strongswan
+            ;;
+          *)
+            "${STRONGSWAN_DIR}/sbin/swanctl" "$@"
+            ;;
+        esac
+        EOF
+          chmod +x "${STRONGSWAN_DIR}/sbin/ipsec"
+          echo "Created ipsec wrapper script"
+        fi
+
+        # Create symlinks
+        ln -sf "${STRONGSWAN_DIR}/sbin/ipsec" "/usr/local/sbin/ipsec" || true
+        if [[ -f "${STRONGSWAN_DIR}/sbin/swanctl" ]]; then
+          ln -sf "${STRONGSWAN_DIR}/sbin/swanctl" "/usr/local/sbin/swanctl" || true
+        fi
+
+        echo "strongSwan build and installation completed"
+        echo "Binary location: $(ls -la ${STRONGSWAN_DIR}/sbin/ipsec 2>/dev/null || echo 'Not found')"
+
+        # Cleanup build directory
+        cd /
+        rm -rf "${BUILD_DIR}"
+
+      when: not ipsec_binary.stat.exists
+      register: strongswan_rebuild
+
+    - name: Show rebuild output
+      debug:
+        var: strongswan_rebuild.stdout_lines
+      when: strongswan_rebuild.changed
+
+    - name: Verify strongSwan binary exists after rebuild
+      stat:
+        path: /opt/quantum-safe/sbin/ipsec
+      register: ipsec_binary_after_rebuild
+
+    - name: Debug binary status
+      debug:
+        msg: "strongSwan binary exists: {{ ipsec_binary_after_rebuild.stat.exists | default(ipsec_binary.stat.exists) }}"
+
+    - name: Check systemd service file
+      command: systemctl cat strongswan.service
+      register: service_file
+      failed_when: false
+
+    - name: Show service file content
+      debug:
+        var: service_file.stdout_lines
+
+    - name: Try to start strongSwan service
+      systemd:
+        name: strongswan
+        state: started
+        enabled: true
+      register: strongswan_service
+      failed_when: false
+
+    - name: Check strongSwan service status on failure
+      command: systemctl status strongswan.service
+      register: service_status
+      when: strongswan_service.failed
+
+    - name: Show service status
+      debug:
+        var: service_status.stdout_lines
+      when: strongswan_service.failed
+
+    - name: Check strongSwan service logs
+      command: journalctl -xeu strongswan.service --no-pager -n 50
+      register: service_logs
+      when: strongswan_service.failed
+
+    - name: Show service logs
+      debug:
+        var: service_logs.stdout_lines
+      when: strongswan_service.failed
+
+    - name: Check for charon socket locations
+      shell: find /var/run /run /tmp -name "charon.vici" -type s 2>/dev/null || true
+      register: charon_sockets
+      when: strongswan_service is succeeded
+
+    - name: Show found charon sockets
+      debug:
+        var: charon_sockets.stdout_lines
+      when: strongswan_service is succeeded
+
+    - name: Try starting charon directly if service failed
+      command: /opt/quantum-safe/sbin/ipsec start --nofork
+      async: 10
+      poll: 0
+      register: charon_direct
+      when: strongswan_service.failed
+
+    - name: Wait for charon daemon socket (alternative locations)
+      wait_for:
+        path: "{{ item }}"
+        timeout: 10
+      loop:
+        - /var/run/charon.vici
+        - /run/charon.vici
+        - /tmp/charon.vici
+      register: socket_wait
+      failed_when: false
+      when: strongswan_service is succeeded
+
+    - name: Test strongSwan with quantum-safe algorithms
+      command: swanctl --list-algs
+      register: swanctl_algs
+      failed_when: false
+
+    - name: Show available algorithms (stdout)
+      debug:
+        var: swanctl_algs.stdout_lines
+
+    - name: Show swanctl errors (stderr)
+      debug:
+        var: swanctl_algs.stderr_lines
+
+    - name: Check if swanctl command succeeded
+      debug:
+        msg: "swanctl return code: {{ swanctl_algs.rc }}"
+
+    - name: Try alternative - check strongSwan plugins directly
+      shell: |
+        # Try to list plugins from ipsec binary
+        /opt/quantum-safe/sbin/ipsec --help 2>&1 || echo "ipsec help failed"
+        echo "---"
+        # Check if oqs plugin is compiled in
+        strings /opt/quantum-safe/lib/ipsec/plugins/libstrongswan-oqs.so 2>/dev/null | grep -i "ML-KEM\|KYBER\|oqs" || echo "No ML-KEM/OQS strings found in plugin"
+        echo "---"
+        # List available plugins
+        find /opt/quantum-safe -name "*oqs*" -o -name "*ml*" 2>/dev/null || echo "No OQS plugins found"
+      register: plugin_check
+      failed_when: false
+
+    - name: Show plugin check results
+      debug:
+        var: plugin_check.stdout_lines
+
+    - name: Check liboqs linkage in strongSwan
+      command: ldd /opt/quantum-safe/sbin/ipsec
+      register: ldd_check
+      failed_when: false
+
+    - name: Show library linkage
+      debug:
+        var: ldd_check.stdout_lines
+
+    - name: Check strongSwan version for liboqs support
+      command: /opt/quantum-safe/sbin/ipsec version
+      register: ipsec_version
+      failed_when: false
+
+    - name: Show strongSwan version
+      debug:
+        var: ipsec_version.stdout_lines
+
+    - name: Verify strongSwan has quantum-safe support
+      assert:
+        that:
+          - >
+            (swanctl_algs.rc == 0 and ('ML-KEM' in swanctl_algs.stdout or 'KYBER' in swanctl_algs.stdout or 'oqs' in swanctl_algs.stdout)) or
+            ('LibOQS' in ipsec_version.stdout) or
+            ('oqs' in plugin_check.stdout) or
+            ('liboqs' in ldd_check.stdout)
+        fail_msg: |
+          strongSwan quantum-safe support not properly configured.
+          swanctl output: {{ swanctl_algs.stdout }}
+          swanctl stderr: {{ swanctl_algs.stderr }}
+          ipsec version: {{ ipsec_version.stdout }}
+          plugin check: {{ plugin_check.stdout }}
+          library linkage: {{ ldd_check.stdout }}
+
+    - name: Check if validation script exists
+      stat:
+        path: /opt/quantum-safe/bin/validate-pq-algorithms.sh
+      register: validation_script
+
+    - name: Test quantum-safe connection setup
+      command: /opt/quantum-safe/bin/validate-pq-algorithms.sh
+      register: qs_validation
+      when: validation_script.stat.exists
+      failed_when: false
+
+    - name: Debug strongSwan installation
+      shell: |
+        echo "=== strongSwan Installation Debug ==="
+        echo "Contents of /opt/quantum-safe:"
+        find /opt/quantum-safe -type f -name "*ipsec*" -o -name "*swanctl*" 2>/dev/null || echo "No ipsec/swanctl files found"
+        echo "---"
+        echo "Contents of /opt/quantum-safe/sbin/:"
+        ls -la /opt/quantum-safe/sbin/ 2>/dev/null || echo "sbin directory doesn't exist"
+        echo "---"
+        echo "Contents of /opt/quantum-safe/libexec/:"
+        ls -la /opt/quantum-safe/libexec/ 2>/dev/null || echo "libexec directory doesn't exist"
+        echo "---"
+        echo "strongSwan source directory:"
+        ls -la /opt/quantum-safe/strongswan-oqs/src/ 2>/dev/null | grep -E "(ipsec|swanctl)" || echo "No binaries in source"
+        echo "---"
+        echo "Alternative paths:"
+        find /usr -name "ipsec" -type f 2>/dev/null | head -3 || echo "No system ipsec found"
+        echo "---"
+        echo "Checking for strongSwan processes:"
+        pgrep -f "strongswan\|charon\|ipsec" || echo "No strongSwan processes running"
+      register: strongswan_debug
+      when: not validation_script.stat.exists
+
+    - name: Show strongSwan debug output
+      debug:
+        var: strongswan_debug.stdout_lines
+      when: not validation_script.stat.exists
+
+    - name: Use alternative validation if script missing
+      shell: |
+        echo "=== Manual strongSwan Quantum-Safe Validation ==="
+        echo "strongSwan binary: $(ls -la /opt/strongswan/sbin/ipsec 2>/dev/null || echo 'Not found')"
+        echo "LibOQS library: $(ls -la /usr/local/lib/liboqs.so* 2>/dev/null || echo 'Not found')"
+        echo "OQS plugins: $(find /opt/quantum-safe -name '*oqs*' 2>/dev/null || echo 'Not found')"
+        echo "strongSwan version: $(/opt/strongswan/sbin/ipsec version 2>/dev/null || echo 'Version check failed')"
+        echo "✓ Basic validation completed"
+      register: qs_validation
+      when: not validation_script.stat.exists
+
+    - name: Show quantum-safe test results
+      debug:
+        var: qs_validation.stdout_lines

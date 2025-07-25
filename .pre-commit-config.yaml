@@ -83,6 +83,30 @@ repos:
         args: [--max-line-length=120]
         files: \.(py)$
 
+  # Terraform Linting and Validation
+  # Provides various hooks to ensure Terraform files are correctly formatted, documented, and free from common errors.
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.99.3
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_docs
+        args:
+          - --args=--output-file=README.md
+          - --args=--output-mode=replace
+      - id: terraform_validate
+        args:
+          - --args=-json
+          - --hook-config=--retry-once-with-cleanup=true
+      - id: terraform_tflint
+        args:
+          - --args=--minimum-failure-severity=error
+        verbose: true
+      - id: terraform_checkov
+      - id: infracost_breakdown
+        args:
+          - --args=--path=.
+        verbose: true
+
   # Shell Script Linting
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
@@ -96,6 +120,14 @@ repos:
     hooks:
       - id: yamllint
         args: [-c=.yamllint.yml]
+
+  # AWS CloudFormation Linting
+  # Checks AWS CloudFormation templates against AWS best practices.
+  - repo: https://github.com/aws-cloudformation/cfn-python-lint
+    rev: v1.35.4
+    hooks:
+      - id: cfn-python-lint
+        files: roles/cloud-.*/files/stack\.yaml$
 
   # Ansible Linting
   # Checks Ansible playbooks for practices and behavior that could potentially be improved.

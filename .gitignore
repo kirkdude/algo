@@ -1,3 +1,8 @@
+# Claude TODO files
+TODO-*
+logs
+
+.ansible/
 *.retry
 .idea/
 configs/*
@@ -8,3 +13,4 @@ inventory_users
 venvs/*
 !venvs/.gitinit
 .vagrant
+.kitchen/

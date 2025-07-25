@@ -1,0 +1,35 @@
+# Classical Fallback Configuration
+# User: {{ item }}
+# Server: {{ IP_subject_alt_name }}
+# For clients without quantum-safe support
+
+conn algovpn-fallback-{{ IP_subject_alt_name }}
+    fragmentation=yes
+    rekey=no
+    dpdaction=clear
+    keyexchange=ikev2
+    compress=no
+    dpddelay=35s
+
+    # Classical algorithms only
+    ike={{ ciphers.defaults.ike }}
+    esp={{ ciphers.defaults.esp }}
+
+    right={{ IP_subject_alt_name }}
+    rightid={{ IP_subject_alt_name }}
+    rightsubnet=0.0.0.0/0
+    rightauth=pubkey
+
+    leftsourceip=%config
+    leftauth=pubkey
+    leftcert={{ item }}.crt
+    leftfirewall=yes
+    left=%defaultroute
+
+    auto=add
+
+# This configuration is compatible with:
+# - strongSwan 5.x clients
+# - iOS/macOS native IPsec clients
+# - Android strongSwan app (current version)
+# - Windows native IPsec clients

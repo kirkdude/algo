@@ -1,0 +1,102 @@
+---
+# Generate quantum-safe IPsec client configurations
+
+- name: Ensure quantum-safe client config directories exist
+  file:
+    path: "{{ ipsec_config_path }}/quantum-safe/{{ item }}"
+    state: directory
+    mode: 0700
+  with_items:
+    - apple
+    - manual
+    - strongswan
+    - fallback
+  delegate_to: localhost
+  become: false
+
+- name: Generate quantum-safe client strongSwan configurations
+  template:
+    src: client-ipsec-pq.conf.j2
+    dest: "{{ ipsec_config_path }}/quantum-safe/strongswan/{{ item }}.conf"
+    mode: 0600
+  with_items: "{{ users }}"
+  delegate_to: localhost
+  become: false
+
+- name: Generate quantum-safe client secrets files
+  template:
+    src: client-ipsec-pq.secrets.j2
+    dest: "{{ ipsec_config_path }}/quantum-safe/strongswan/{{ item }}.secrets"
+    mode: 0600
+  with_items: "{{ users }}"
+  delegate_to: localhost
+  become: false
+
+- name: Generate quantum-safe manual configurations
+  template:
+    src: client-manual-pq.conf.j2
+    dest: "{{ ipsec_config_path }}/quantum-safe/manual/{{ item }}-pq.conf"
+    mode: 0600
+  with_items: "{{ users }}"
+  delegate_to: localhost
+  become: false
+
+- name: Create quantum-safe connection instructions
+  template:
+    src: quantum-safe-readme.md.j2
+    dest: "{{ ipsec_config_path }}/quantum-safe/README.md"
+    mode: 0644
+  delegate_to: localhost
+  become: false
+
+- name: Generate fallback client configurations for non-PQ clients
+  template:
+    src: client-fallback.conf.j2
+    dest: "{{ ipsec_config_path }}/quantum-safe/fallback/{{ item }}.conf"
+    mode: 0600
+  with_items: "{{ users }}"
+  delegate_to: localhost
+  become: false
+
+- name: Create quantum-safe configuration directory structure info
+  copy:
+    dest: "{{ ipsec_config_path }}/quantum-safe/directory-structure.txt"
+    mode: 0644
+    content: |
+      Quantum-Safe IPsec Client Configurations
+      =======================================
+
+      Directory Structure:
+
+      strongswan/     - strongSwan 6.0+ client configs with ML-KEM support
+      manual/         - Manual configuration files for quantum-safe connections
+      fallback/       - Classical configurations for non-PQ clients
+      apple/          - iOS/macOS profiles (fallback mode, future PQ support)
+
+      Security Modes:
+
+      {{ quantum_safe_mode | upper }} mode active
+      Security Level: {{ quantum_safe_security_level | upper }}
+
+      Supported Algorithms:
+      - {{ ciphers.quantum_safe.hybrid.ike }}
+      - {{ ciphers.quantum_safe.hybrid.esp }}
+
+      Client Compatibility:
+      - strongSwan 6.0+ on Linux: Full quantum-safe support
+      - strongSwan Android app: Classical fallback (future PQ support)
+      - iOS/macOS native: Classical fallback (awaiting Apple implementation)
+      - Windows native: Classical fallback (awaiting Microsoft implementation)
+
+      Generated: {{ ansible_date_time.iso8601 }}
+  delegate_to: localhost
+  become: false
+
+- name: Ensure proper permissions for quantum-safe configs
+  file:
+    path: "{{ ipsec_config_path }}/quantum-safe"
+    state: directory
+    mode: 0700
+    recurse: true
+  delegate_to: localhost
+  become: false

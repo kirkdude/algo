@@ -1,0 +1,11 @@
+[local]
+localhost ansible_connection=local
+
+[test-kitchen]
+default ansible_host=127.0.0.1 ansible_user=vagrant ansible_port=2222
+
+[vpn-host]
+localhost ansible_connection=local
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

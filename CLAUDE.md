@@ -16,12 +16,24 @@ Algo VPN is an Ansible-based project that automates the setup of secure personal
 
 ### Testing
 
-- **Run all tests**: Tests are located in `tests/` directory with individual scripts for different scenarios:
+- **Run all tests**: `make test` - Run syntax validation and Test Kitchen integration tests
+- **Test Kitchen operations**:
+  - `make kitchen-setup` - Install Test Kitchen Ruby dependencies
+  - `make kitchen-test` - Run all Test Kitchen test suites
+  - `make kitchen-converge` - Deploy VPN in test environment without verification
+  - `make kitchen-verify` - Run verification tests only
+  - `make kitchen-destroy` - Destroy test environments
+  - `make kitchen-clean` - Clean up Test Kitchen artifacts
+- **Individual test scripts**: Located in `tests/` directory for specific scenarios:
   - `tests/wireguard-client.sh` - Test WireGuard client functionality
   - `tests/ipsec-client.sh` - Test IPsec client functionality
   - `tests/ssh-tunnel.sh` - Test SSH tunneling
   - `tests/local-deploy.sh` - Test local deployment
   - `tests/update-users.sh` - Test user management
+- **Test Kitchen suites**: Configured in `.kitchen.yml` with proper systemd support:
+  - `default` - Basic WireGuard VPN deployment test
+  - `users` - User management functionality test
+  - `quantum-safe` - Quantum-safe cryptography integration test
 
 ### Linting and Validation
 
