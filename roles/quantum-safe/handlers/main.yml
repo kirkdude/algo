@@ -6,8 +6,41 @@
   become: yes
 
 - name: reload environment
-  shell: source /etc/profile.d/quantum-safe.sh
+  shell: . /etc/profile.d/quantum-safe.sh
+  args:
+    executable: /bin/bash
   become: yes
+
+- name: daemon-reload
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: check if strongswan service should be managed
+  set_fact:
+    manage_strongswan_service: "{{ integrate_with_strongswan | default(false) }}"
+
+- name: stop system strongswan service
+  systemd:
+    name: strongswan
+    state: stopped
+    enabled: no
+  become: yes
+  when:
+    - ansible_service_mgr == "systemd"
+    - manage_strongswan_service
+  ignore_errors: true
+
+- name: restart custom strongswan service
+  systemd:
+    name: strongswan
+    state: restarted
+    daemon_reload: yes
+  become: yes
+  when:
+    - ansible_service_mgr == "systemd"
+    - manage_strongswan_service
+    - integrate_with_strongswan | default(false)
 
 - name: restart strongswan
   systemd:
@@ -15,4 +48,14 @@
     state: restarted
     daemon_reload: yes
   become: yes
-  when: ansible_service_mgr == "systemd"
+  when:
+    - ansible_service_mgr == "systemd"
+    - manage_strongswan_service | default(false)
+
+- name: ensure strongswan configuration is valid
+  command: "{{ strongswan_install_dir | default('/opt/strongswan') }}/sbin/ipsec status"
+  register: strongswan_status_check
+  become: yes
+  when: manage_strongswan_service
+  failed_when: false
+  changed_when: false

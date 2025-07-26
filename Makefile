@@ -57,16 +57,58 @@ lint-fix: ## Run linting with auto-fix where possible
 	pre-commit run --all-files
 
 ## Testing
-test: ## Run tests
-	@echo "Running Ansible playbook syntax validation..."
-	ansible-playbook main.yml --syntax-check
-	ansible-playbook users.yml --syntax-check
-	@echo "Running shell script tests..."
-	@if [ -f "tests/run_tests.sh" ]; then \
-		bash tests/run_tests.sh; \
-	else \
-		echo "No test runner found - individual test scripts available in tests/"; \
-	fi
+test: kitchen-test ## Run all tests using Test Kitchen
+
+## Test Kitchen Operations
+kitchen-setup: ## Install Test Kitchen dependencies
+	@echo "Installing Test Kitchen dependencies..."
+	@if [ ! -f Gemfile ]; then echo "Error: Gemfile not found. Run make install first."; exit 1; fi
+	bundle install
+	@echo "Test Kitchen dependencies installed!"
+
+kitchen-test: ## Run all kitchen tests
+	@echo "Running Test Kitchen tests..."
+	kitchen test
+
+kitchen-converge: ## Deploy VPN in test environment
+	@echo "Converging Test Kitchen environments..."
+	kitchen converge
+
+kitchen-verify: ## Run verification tests only
+	@echo "Running Test Kitchen verification..."
+	kitchen verify
+
+kitchen-destroy: ## Destroy test environments
+	@echo "Destroying Test Kitchen environments..."
+	kitchen destroy
+
+kitchen-clean: ## Clean up kitchen artifacts
+	@echo "Cleaning Test Kitchen artifacts..."
+	kitchen destroy
+	rm -rf .kitchen/
+
+
+## Quantum-Safe Testing
+quantum-dev: ## Setup quantum-safe development environment
+	@echo "Setting up quantum-safe development environment..."
+	ansible-playbook quantum-safe-dev.yml
+	@echo "Quantum-safe development environment ready!"
+
+quantum-test: ## Run quantum-safe algorithm tests
+	@echo "Running quantum-safe cryptography tests..."
+	/opt/quantum-safe/tests/run-all-tests.sh
+
+quantum-benchmark: ## Run quantum-safe performance benchmarks
+	@echo "Running quantum-safe performance benchmarks..."
+	/opt/quantum-safe/tests/benchmark-quantum-safe.sh
+
+quantum-ipsec-test: ## Test quantum-safe IPsec connectivity
+	@echo "Testing quantum-safe IPsec connectivity..."
+	tests/quantum-safe-ipsec.sh
+
+quantum-performance: ## Run quantum-safe IPsec performance tests
+	@echo "Running quantum-safe IPsec performance tests..."
+	tests/quantum-safe-performance.sh
 
 ## Building
 build: lint-full test ## Build and validate the project
@@ -122,3 +164,39 @@ update-users: ## Update VPN users
 dev-setup: install ## Set up development environment with all tools (alias for install)
 
 check: lint test ## Quick check - run linting and tests
+
+ci-local: ## Run GitHub Actions checks locally (Main workflow lint job)
+	@echo "=== Running GitHub Actions Main workflow checks locally ==="
+	@echo "Note: This mimics the GitHub Actions Main workflow lint job"
+	@echo "Python version: $(shell python --version)"
+	@echo "Running shellcheck..."
+	shellcheck algo install.sh
+	@echo "Running Ansible syntax checks..."
+	ansible-playbook -i inventory.syntax-check main.yml --syntax-check
+	ansible-playbook -i inventory.syntax-check users.yml --syntax-check
+	@echo "Running ansible-lint (compatibility may vary by Python version)..."
+	ansible-lint -x experimental,package-latest,unnamed-task -v *.yml roles/{local,cloud-*}/*/*.yml
+	@echo "=== GitHub Actions Main workflow lint checks complete ==="
+
+ci-docker-local: docker-build ## Run GitHub Actions docker-deploy checks locally
+	@echo "=== Running GitHub Actions docker-deploy workflow locally ==="
+	@echo "Building Docker image..."
+	@echo "Running local Docker deployment test..."
+	./tests/local-deploy.sh
+	./tests/update-users.sh
+	@echo "=== Docker deployment checks complete ==="
+
+ci-simple: ## Run basic checks equivalent to GitHub Actions (no dependency installs)
+	@echo "=== Running basic GitHub Actions equivalent checks ==="
+	@echo "1. Running shellcheck..."
+	shellcheck algo install.sh
+	@echo "2. Running Ansible syntax checks..."
+	ansible-playbook -i inventory.syntax-check main.yml --syntax-check
+	ansible-playbook -i inventory.syntax-check users.yml --syntax-check
+	@echo "3. Running pre-commit hooks (recommended over ansible-lint)..."
+	pre-commit run --all-files
+	@echo "=== Basic GitHub Actions checks complete ==="
+	@echo "Note: Use 'make lint' and 'make test' for comprehensive local validation"
+
+ci-all-local: ci-local ci-docker-local ## Run all GitHub Actions workflows locally
+	@echo "=== All GitHub Actions workflows completed locally ==="

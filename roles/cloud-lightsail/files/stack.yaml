@@ -65,8 +65,6 @@ Resources:
     Properties:
       AttachedTo: !Ref Instance
       StaticIpName: !Join ["-", [!Ref "AWS::StackName", "ip"]]
-    DependsOn:
-      - Instance
 
 Outputs:
   IpAddress:

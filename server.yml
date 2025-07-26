@@ -56,8 +56,19 @@
           tags: wireguard
 
         - import_role:
+            name: quantum-safe
+          when:
+            - ipsec_enabled
+            - quantum_safe_enabled
+          tags:
+            - ipsec
+            - quantum-safe
+
+        - import_role:
             name: strongswan
-          when: ipsec_enabled
+          when:
+            - ipsec_enabled
+            - not quantum_safe_enabled
           tags: ipsec
 
         - import_role:
@@ -87,6 +98,9 @@
                   IP_subject_alt_name: {{ IP_subject_alt_name }}
                   ipsec_enabled: {{ ipsec_enabled }}
                   wireguard_enabled: {{ wireguard_enabled }}
+                  quantum_safe_enabled: {{ quantum_safe_enabled }}
+                  quantum_safe_mode: {{ quantum_safe_mode }}
+                  quantum_safe_security_level: {{ quantum_safe_security_level }}
                   {% if tests|default(false)|bool %}
                   ca_password: '{{ CA_password }}'
                   p12_password: '{{ p12_export_password }}'
@@ -100,7 +114,9 @@
                 dest: configs/localhost
                 state: link
                 force: true
-              when: inventory_hostname == 'localhost'
+              become: false
+              delegate_to: localhost
+              when: algo_provider == 'local'
 
             - name: Import tmpfs tasks
               import_tasks: playbooks/tmpfs/umount.yml

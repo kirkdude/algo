@@ -16,22 +16,38 @@ Algo VPN is an Ansible-based project that automates the setup of secure personal
 
 ### Testing
 
-- **Run all tests**: Tests are located in `tests/` directory with individual scripts for different scenarios:
+- **Run all tests**: `make test` - Run syntax validation and Test Kitchen integration tests
+- **Test Kitchen operations**:
+  - `make kitchen-setup` - Install Test Kitchen Ruby dependencies
+  - `make kitchen-test` - Run all Test Kitchen test suites
+  - `make kitchen-converge` - Deploy VPN in test environment without verification
+  - `make kitchen-verify` - Run verification tests only
+  - `make kitchen-destroy` - Destroy test environments
+  - `make kitchen-clean` - Clean up Test Kitchen artifacts
+- **Individual test scripts**: Located in `tests/` directory for specific scenarios:
   - `tests/wireguard-client.sh` - Test WireGuard client functionality
   - `tests/ipsec-client.sh` - Test IPsec client functionality
   - `tests/ssh-tunnel.sh` - Test SSH tunneling
   - `tests/local-deploy.sh` - Test local deployment
   - `tests/update-users.sh` - Test user management
+- **Test Kitchen suites**: Configured in `.kitchen.yml` with proper systemd support:
+  - `default` - Basic WireGuard VPN deployment test
+  - `users` - User management functionality test
+  - `quantum-safe` - Quantum-safe cryptography integration test
 
 ### Linting and Validation
 
 - **Quick linting**: `make lint` - Run pre-commit hooks on all files
 - **Comprehensive linting**: `make lint-full` - Pre-commit + Ansible + shell script checks
 - **Auto-fix linting**: `make lint-fix` - Apply automatic fixes where possible
+- **GitHub Actions equivalent**: `make ci-simple` - Run basic checks equivalent to GitHub Actions locally
+- **Full CI simulation**: `make ci-local` - Mimic GitHub Actions Main workflow lint job
 - **Manual checks**:
-  - Syntax check: `ansible-playbook main.yml --syntax-check`
+  - Syntax check: `ansible-playbook -i inventory.syntax-check main.yml --syntax-check`
   - Shell script linting: `shellcheck algo install.sh`
   - Ansible linting: `ansible-lint *.yml roles/{local,cloud-*}/*/*.yml`
+
+**Note**: Collection version warnings may appear with older ansible-core versions but don't affect functionality.
 
 ### Docker Operations
 

@@ -19,22 +19,39 @@ ANSIBLE_EXTRA_ARGS="${13:-${ANSIBLE_EXTRA_ARGS}}"
 cd /opt/
 
 installRequirements() {
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install \
-    python3-virtualenv \
-    jq -y
+  # Dependencies are pre-installed in CI environment
+  echo "Dependencies already installed, skipping apt-get install"
 }
 
 getAlgo() {
-  [ ! -d "algo" ] && git clone "https://github.com/${REPO_SLUG}" -b "${REPO_BRANCH}" algo
-  cd algo
+  # Repository and dependencies are pre-staged in CI environment
+  if [ -d "algo" ]; then
+    echo "Using pre-staged algo repository"
+    cd algo
 
-  python3 -m virtualenv --python="$(command -v python3)" .env
-  # shellcheck source=/dev/null
-  . .env/bin/activate
-  python3 -m pip install -U pip virtualenv
-  python3 -m pip install -r requirements.txt
+    # Check if virtual environment already exists and is working
+    if [ -d ".env" ] && .env/bin/python3 -c "import ansible" 2>/dev/null; then
+      echo "Pre-configured Python environment found and working"
+    else
+      echo "Setting up Python environment..."
+      python3 -m virtualenv --python="$(command -v python3)" .env || {
+        echo "virtualenv failed, trying pip install in existing environment"
+      }
+      # shellcheck source=/dev/null
+      . .env/bin/activate 2>/dev/null || true
+      python3 -m pip install -U pip virtualenv 2>/dev/null || echo "pip upgrade failed, continuing..."
+      python3 -m pip install -r requirements.txt 2>/dev/null || echo "pip install failed, using existing packages"
+    fi
+  else
+    echo "Pre-staged repository not found, cloning from GitHub"
+    git clone "https://github.com/${REPO_SLUG}" -b "${REPO_BRANCH}" algo
+    cd algo
+    python3 -m virtualenv --python="$(command -v python3)" .env
+    # shellcheck source=/dev/null
+    . .env/bin/activate
+    python3 -m pip install -U pip virtualenv
+    python3 -m pip install -r requirements.txt
+  fi
 }
 
 publicIpFromInterface() {

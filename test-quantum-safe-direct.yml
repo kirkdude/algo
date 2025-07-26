@@ -1,0 +1,115 @@
+---
+# Direct quantum-safe component testing (no full VPN deployment)
+- name: Test quantum-safe components directly
+  hosts: localhost
+  connection: local
+  become: true
+  vars_files:
+    - config.cfg
+  vars:
+    # Test configuration
+    quantum_safe_enabled: true
+    quantum_safe_mode: hybrid
+    quantum_safe_security_level: standard
+    quantum_safe_dev_mode: true
+    quantum_safe_testing: true
+    integrate_with_strongswan: true
+
+    # Minimal test setup
+    IP_subject_alt_name: "quantum-test.local"
+    users:
+      - "test-user-1"
+      - "test-user-2"
+
+    # Required variables for templates
+    strongswan_network: "10.48.0.0/16"
+    strongswan_network_ipv6: "2001:db8:4160::/48"
+    local_service_ip: "172.16.0.1"
+    local_service_ipv6: "fd00::1"
+    ipv6_support: false
+    algo_dns_adblocking: false
+    dns_encryption: true
+    strongswan_log_level: 2
+    quantum_safe_logging: "info"
+
+    dns_servers:
+      ipv4:
+        - "1.1.1.1"
+        - "1.0.0.1"
+      ipv6:
+        - "2606:4700:4700::1111"
+        - "2606:4700:4700::1001"
+
+    ipsec_config_path: "./test-quantum-safe-output/{{ IP_subject_alt_name }}/ipsec"
+
+  tasks:
+    - name: Create test output directory
+      file:
+        path: "{{ ipsec_config_path }}"
+        state: directory
+        mode: 0755
+      delegate_to: localhost
+      become: false
+
+    - name: Load quantum-safe variables
+      include_vars: roles/quantum-safe/vars/main.yml
+
+    - name: Test LibOQS Dependencies Installation
+      import_tasks: roles/quantum-safe/tasks/dependencies.yml
+      tags: dependencies
+
+    - name: Test LibOQS Build
+      import_tasks: roles/quantum-safe/tasks/liboqs.yml
+      tags: liboqs
+      when: quantum_safe_dev_mode
+
+    - name: Test strongSwan Quantum-Safe Build
+      import_tasks: roles/quantum-safe/tasks/strongswan-pq.yml
+      tags: strongswan
+      when: integrate_with_strongswan
+
+    - name: Test Configuration Generation
+      import_tasks: roles/quantum-safe/tasks/configs.yml
+      tags: configs
+      when: create_hybrid_configs
+
+    - name: Test Client Config Generation
+      import_tasks: roles/quantum-safe/tasks/client-configs-pq.yml
+      tags: client-configs
+      when: integrate_with_strongswan
+
+    - name: Test Validation Scripts
+      import_tasks: roles/quantum-safe/tasks/validation.yml
+      tags: validation
+
+    - name: Create comprehensive test report
+      template:
+        src: test-report.j2
+        dest: "./test-quantum-safe-output/TEST-REPORT.md"
+        mode: 0644
+      vars:
+        test_timestamp: "{{ ansible_date_time.iso8601 }}"
+        test_type: "Direct Component Testing"
+        test_platform: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Display test summary
+      debug:
+        msg: |
+          =====================================
+          Quantum-Safe Component Test Complete
+          =====================================
+          Mode: {{ quantum_safe_mode }}
+          Security Level: {{ quantum_safe_security_level }}
+          strongSwan Version: {{ strongswan_version }}
+          LibOQS Version: {{ liboqs_version }}
+
+          Test Results: ./test-quantum-safe-output/TEST-REPORT.md
+          Configurations: {{ ipsec_config_path }}
+
+          Next Steps:
+          1. Review generated configurations
+          2. Run validation tests
+          3. Test connectivity (requires full deployment)
+          =====================================
