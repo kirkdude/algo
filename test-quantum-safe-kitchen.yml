@@ -1,0 +1,29 @@
+---
+# Main Test Kitchen playbook for quantum-safe Algo testing
+- import_playbook: main.yml
+
+- name: Post-deployment quantum-safe validation
+  hosts: all
+  become: true
+  tasks:
+    - name: Validate quantum-safe libraries are installed
+      command: "/opt/quantum-safe/bin/oqs-list"
+      register: oqs_list_output
+
+    - name: Check ML-KEM algorithms are available
+      assert:
+        that:
+          - "'ML-KEM-512' in oqs_list_output.stdout"
+          - "'ML-KEM-768' in oqs_list_output.stdout"
+          - "'ML-KEM-1024' in oqs_list_output.stdout"
+        fail_msg: "ML-KEM algorithms not found in liboqs"
+
+    - name: Check strongSwan quantum-safe configuration
+      stat:
+        path: /etc/strongswan.d/charon/quantum-safe.conf
+      register: strongswan_qs_conf
+
+    - name: Validate strongSwan quantum-safe config exists
+      assert:
+        that: strongswan_qs_conf.stat.exists
+        fail_msg: "strongSwan quantum-safe configuration not found"

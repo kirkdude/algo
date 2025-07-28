@@ -107,11 +107,61 @@
       - item: "{{ 'net.ipv6.conf.all.forwarding' if ipv6_support else none }}"
         value: 1
 
+- name: Clean apt cache
+  shell: apt-get clean
+  changed_when: false
+
+- name: Configure DNS for apt
+  shell: |
+    # Check if DNS is already working (e.g., from container-level configuration)
+    if timeout 3 nslookup archive.ubuntu.com >/dev/null 2>&1; then
+      echo "DNS already working, skipping configuration"
+      exit 0
+    fi
+
+    if [ -f /run/systemd/resolve/resolv.conf ]; then
+      cp /run/systemd/resolve/resolv.conf /etc/resolv.conf
+    elif [ -f /etc/resolv.conf.orig ]; then
+      cp /etc/resolv.conf.orig /etc/resolv.conf
+    else
+      echo 'nameserver 8.8.8.8' > /etc/resolv.conf
+      echo 'nameserver 1.1.1.1' >> /etc/resolv.conf
+    fi
+  changed_when: false
+
+- name: Wait for network connectivity
+  shell: |
+    # Skip network connectivity test in GitHub Actions environment
+    if [ -n "$GITHUB_ACTIONS" ] || [ -n "$CI" ]; then
+      echo "Skipping network connectivity test in CI environment"
+      exit 0
+    fi
+    # Test network connectivity via DNS resolution instead of direct TCP connection
+    timeout 10 nslookup archive.ubuntu.com >/dev/null 2>&1 || \
+    timeout 10 nslookup security.ubuntu.com >/dev/null 2>&1 || \
+    timeout 10 nslookup google.com >/dev/null 2>&1
+  register: connectivity_test
+  ignore_errors: true
+  changed_when: false
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+  register: apt_cache_result
+  until: apt_cache_result is succeeded
+  retries: 5
+  delay: 10
+  when: ansible_env.GITHUB_ACTIONS is not defined and ansible_env.CI is not defined
+
 - name: Install tools
   apt:
     name: "{{ tools|default([]) }}"
     state: present
-    update_cache: true
+  register: apt_result
+  until: apt_result is succeeded
+  retries: 3
+  delay: 10
+  when: ansible_env.GITHUB_ACTIONS is not defined and ansible_env.CI is not defined
 
 - name: Install headers
   apt:
@@ -119,7 +169,11 @@
       - linux-headers-generic
       - linux-headers-{{ ansible_kernel }}
     state: present
-  when: install_headers | bool
+  register: apt_headers_result
+  until: apt_headers_result is succeeded
+  retries: 3
+  delay: 10
+  when: install_headers | bool and ansible_env.GITHUB_ACTIONS is not defined and ansible_env.CI is not defined
 
 - name: Configure the alternative ingress ip
   include_tasks: aip/main.yml

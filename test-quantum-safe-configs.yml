@@ -1,0 +1,80 @@
+---
+# Test quantum-safe configuration generation
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Test configuration
+    quantum_safe_enabled: true
+    quantum_safe_mode: hybrid
+    quantum_safe_security_level: standard
+    IP_subject_alt_name: "192.168.1.100"
+    strongswan_network: "10.48.0.0/16"
+    strongswan_network_ipv6: "2001:db8:4160::/48"
+    local_service_ip: "172.16.0.1"
+    local_service_ipv6: "fd00::1"
+    ipv6_support: false
+    algo_dns_adblocking: false
+    dns_encryption: true
+    strongswan_log_level: 2
+    quantum_safe_logging: "info"
+    users:
+      - "test-user-1"
+      - "test-user-2"
+    dns_servers:
+      ipv4:
+        - "1.1.1.1"
+        - "1.0.0.1"
+      ipv6:
+        - "2606:4700:4700::1111"
+        - "2606:4700:4700::1001"
+    ipsec_config_path: "./test-configs/192.168.1.100/ipsec"
+
+  tasks:
+    - name: Create test output directory
+      file:
+        path: "{{ ipsec_config_path }}"
+        state: directory
+        mode: 0755
+
+    - name: Load quantum-safe variables
+      include_vars: roles/quantum-safe/vars/main.yml
+
+    - name: Test ipsec configuration template
+      template:
+        src: roles/quantum-safe/templates/ipsec-pq.conf.j2
+        dest: "{{ ipsec_config_path }}/test-ipsec-pq.conf"
+        mode: 0644
+
+    - name: Test swanctl configuration template
+      template:
+        src: roles/quantum-safe/templates/swanctl-pq.conf.j2
+        dest: "{{ ipsec_config_path }}/test-swanctl-pq.conf"
+        mode: 0644
+
+    - name: Test client configuration template
+      template:
+        src: roles/quantum-safe/templates/client-ipsec-pq.conf.j2
+        dest: "{{ ipsec_config_path }}/test-client-{{ item }}.conf"
+        mode: 0644
+      loop: "{{ users }}"
+
+    - name: Display generated configuration files
+      find:
+        paths: "{{ ipsec_config_path }}"
+        patterns: "test-*.conf"
+      register: test_configs
+
+    - name: Show generated files
+      debug:
+        msg: "Generated config file: {{ item.path }}"
+      loop: "{{ test_configs.files }}"
+
+    - name: Validate hybrid cipher suite configuration
+      debug:
+        msg: |
+          Quantum-Safe Configuration Validation:
+          - Mode: {{ quantum_safe_mode }}
+          - IKE: {{ ciphers.quantum_safe.hybrid.ike }}
+          - ESP: {{ ciphers.quantum_safe.hybrid.esp }}
+          - Generated {{ test_configs.files | length }} test configuration files

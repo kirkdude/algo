@@ -1,0 +1,82 @@
+---
+# Quantum-safe performance benchmarking playbook
+- name: Quantum-safe performance benchmarks setup
+  hosts: all
+  become: true
+  vars:
+    # Minimal setup for benchmarking
+    wireguard_enabled: false
+    ipsec_enabled: true
+    quantum_safe_enabled: true
+    quantum_safe_benchmarks: true
+    quantum_safe_dev_mode: true
+    quantum_safe_testing: true
+    quantum_safe_mode: hybrid
+    quantum_safe_security_level: standard
+    algo_provider: local
+    cloud_instance_ip: localhost
+
+    # Missing variables for common role
+    unattended_reboot:
+      enabled: false
+      time: "06:00"
+    dns_servers:
+      ipv4:
+        - 1.1.1.1
+        - 8.8.8.8
+    local_service_ip: "172.16.0.1"
+    local_service_ipv6: "fd00::1"
+    reduce_mtu: 0
+    alternative_ingress_ip: false
+    wireguard_port: 51820
+    strongswan_network: 10.48.0.0/16
+    wireguard_network_ipv4: 10.49.0.0/16
+    BetweenClients_DROP: true
+    block_smb: true
+    block_netbios: true
+    custom_server_stamps: {}
+    IP_subject_alt_name: algo-quantum-benchmarks.local
+    ansible_ssh_port: 22
+    ipsec_config_path: "configs/{{ ansible_default_ipv4.address }}/ipsec/"
+    users:
+      - benchmark-client
+
+  tasks:
+    - name: Import common role (base system setup)
+      import_role:
+        name: common
+      tags: common
+
+    - name: Import quantum-safe role (for benchmarking)
+      import_role:
+        name: quantum-safe
+      tags:
+        - quantum-safe
+
+- name: Quantum-safe performance benchmarks
+  hosts: all
+  become: true
+  tasks:
+    - name: Run quantum-safe performance benchmarks
+      command: /opt/quantum-safe/tests/benchmark-quantum-safe.sh
+      register: benchmark_results
+
+    - name: Display benchmark results
+      debug:
+        var: benchmark_results.stdout_lines
+
+    - name: Save benchmark results to file
+      copy:
+        content: "{{ benchmark_results.stdout }}"
+        dest: /tmp/quantum-safe-benchmark-results.txt
+
+    - name: Run memory usage analysis
+      shell: |
+        echo "=== Memory Usage Analysis ==="
+        ps aux | grep -E "(strongswan|charon)" | head -10
+        free -h
+      register: memory_analysis
+
+    - name: Display memory analysis
+      debug:
+        var: memory_analysis.stdout_lines

@@ -1,0 +1,130 @@
+{
+  "quantum_safe_development_config": {
+    "version": "{{ liboqs_version }}",
+    "timestamp": "{{ ansible_date_time.iso8601 }}",
+    "environment": "development",
+
+    "build_configuration": {
+      "liboqs": {
+        "version": "{{ liboqs_version }}",
+        "repo_url": "{{ liboqs_repo_url }}",
+        "install_dir": "{{ liboqs_install_dir }}",
+        "build_dir": "{{ liboqs_build_dir }}",
+        "shared_libs": {{ liboqs_shared_libs | lower }},
+        "build_parallel_jobs": {{ liboqs_build_parallel_jobs }},
+        "optimization": "{{ quantum_safe_optimization }}",
+        "build_only_lib": true
+      },
+
+      "strongswan": {
+        "version": "{{ strongswan_version }}",
+        "repo_url": "{{ strongswan_repo_url }}",
+        "install_dir": "{{ strongswan_install_dir }}",
+        "build_dir": "{{ strongswan_build_dir }}",
+        "enable_oqs": {{ strongswan_enable_oqs | lower }},
+        "enable_ml_plugin": {{ strongswan_enable_ml_plugin | lower }}
+      }
+    },
+
+    "algorithms": {
+      "supported_kem": {{ quantum_safe_algorithms.ml_kem | to_json }},
+      "supported_signatures": {{ quantum_safe_algorithms.ml_dsa | to_json }},
+      "default_kem": "{{ default_security_level }}",
+      "default_signature": "{{ default_signature_level }}"
+    },
+
+    "security_profiles": {
+      "conservative": {
+        "description": "128-bit security, maximum compatibility",
+        "kem": "ML-KEM-512",
+        "signature": "ML-DSA-44",
+        "classical_fallback": "ECDH-P256"
+      },
+      "standard": {
+        "description": "192-bit security, recommended default",
+        "kem": "ML-KEM-768",
+        "signature": "ML-DSA-65",
+        "classical_fallback": "ECDH-P384"
+      },
+      "high": {
+        "description": "256-bit security, CNSA 2.0 compliant",
+        "kem": "ML-KEM-1024",
+        "signature": "ML-DSA-87",
+        "classical_fallback": "ECDH-P384"
+      }
+    },
+
+    "development_settings": {
+      "dev_mode": {{ quantum_safe_dev_mode | lower }},
+      "testing_enabled": {{ quantum_safe_testing | lower }},
+      "benchmarks_enabled": {{ quantum_safe_benchmarks | lower }},
+      "deterministic_keys": {{ quantum_safe_deterministic_keys | lower }},
+      "debug_logging": {{ (quantum_safe_logging == 'debug') | lower }},
+      "performance_monitoring": {{ performance_monitoring | lower }}
+    },
+
+    "integration_status": {
+      "strongswan": {
+        "enabled": {{ integrate_with_strongswan | lower }},
+        "status": "development",
+        "hybrid_configs": {{ create_hybrid_configs | lower }}
+      },
+      "wireguard": {
+        "enabled": {{ integrate_with_wireguard | lower }},
+        "status": "planned",
+        "phase": 3
+      }
+    },
+
+    "paths": {
+      "liboqs_lib": "/usr/local/lib/liboqs.so",
+      "liboqs_headers": "/usr/local/include/oqs",
+      "strongswan_config": "/etc/swanctl/swanctl.conf",
+      "test_scripts": "/opt/quantum-safe/tests",
+      "config_dir": "/opt/quantum-safe/configs",
+      "log_dir": "/opt/quantum-safe/logs"
+    },
+
+    "testing": {
+      "test_suites": [
+        "liboqs_algorithm_test",
+        "strongswan_pq_test",
+        "integration_test",
+        "performance_benchmark"
+      ],
+      "validation_scripts": [
+        "/opt/quantum-safe/tests/test-liboqs-algorithms.sh",
+        "/opt/quantum-safe/tests/test-strongswan-pq.sh",
+        "/opt/quantum-safe/tests/validation-report.py"
+      ]
+    },
+
+    "performance_targets": {
+      "acceptable_overhead": {
+        "cpu_multiplier": 3.0,
+        "memory_increase_percent": 20,
+        "key_size_multiplier": 50
+      },
+      "benchmark_algorithms": [
+        "{{ default_security_level }}",
+        "{{ default_signature_level }}"
+      ]
+    },
+
+    "fallback_configuration": {
+      "enabled": {{ enable_fallback_mode | lower }},
+      "backup_configs": {{ backup_classical_configs | lower }},
+      "classical_algorithms": [
+        "aes256gcm16-prfsha512-ecp384",
+        "aes256gcm16-prfsha384-ecp256"
+      ]
+    },
+
+    "experimental_features": {
+      "pure_pq_mode": false,
+      "multiple_ke": false,
+      "hybrid_certificates": false,
+      "quantum_rng": false
+    }
+  }
+}
